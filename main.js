@@ -282,9 +282,9 @@ async function closeEnvelope() {
   return true;
 }
 // Envelope guardado: deitado na margem superior direita do papel, ao lado do título, fora da grade.
-const STORE_POS = new THREE.Vector3(3.22, 0.045, -3.95);
+const STORE_POS = new THREE.Vector3(3.3, 0.045, -4.2);
 const STORE_QUAT = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0.12));
-const STORE_SCALE = 0.5;
+const STORE_SCALE = 0.44;
 const HOVER_POS = new THREE.Vector3(0, 2.3, -0.2);
 function moveEnvelope(toPos, toQuat, toScale, dur, lift = 0) {
   const p0 = envelope.position.clone(), q0 = envelope.quaternion.clone(), s0 = envelope.scale.x, i0 = env.inner.position.y;
@@ -387,7 +387,7 @@ async function animateMove(id, to) {
 }
 async function toppleWhiteKing() {
   const u = pieces.wk.userData, w = cellPos(pos.wk);
-  const dir = new THREE.Vector3(Math.sign(w.x) * 0.7, 0, 1); // tomba para fora e para a frente (visível)
+  const dir = new THREE.Vector3(0, 0, 1); void w; // tomba para a frente (fica dentro da tela)
   u.yaw.rotation.y = Math.atan2(-dir.z, dir.x);
   const R = 0.36; u.hinge.position.x = R; u.holder.position.x = -R;
   await tween(250, (k, raw) => { u.hinge.rotation.z = -0.12 * Math.sin(raw * Math.PI * 2); });
