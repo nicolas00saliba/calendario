@@ -278,9 +278,38 @@ async function closeEnvelope() {
   await tween(600, k => { env.card.position.y = 1.05 * (1 - k); }, easeInOut);
   await tween(600, k => { env.flap.rotation.x = -Math.PI * (1 - k); }, easeInOut);
   env.card.position.set(0, 0, 0); env.card.scale.setScalar(1); env.flap.rotation.x = 0;
-  envState = 'ready';
-  setStatus('Envelope fechado. Toque nele para abrir de novo.', 'win');
+  await storeEnvelope();
   return true;
+}
+// Envelope guardado: deitado na margem superior direita do papel, ao lado do título, fora da grade.
+const STORE_POS = new THREE.Vector3(3.22, 0.045, -3.95);
+const STORE_QUAT = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0.12));
+const STORE_SCALE = 0.5;
+const HOVER_POS = new THREE.Vector3(0, 2.3, -0.2);
+function moveEnvelope(toPos, toQuat, toScale, dur, lift = 0) {
+  const p0 = envelope.position.clone(), q0 = envelope.quaternion.clone(), s0 = envelope.scale.x, i0 = env.inner.position.y;
+  return tween(dur, k => {
+    envelope.position.lerpVectors(p0, toPos, k);
+    envelope.position.y += Math.sin(Math.PI * k) * lift;
+    envelope.quaternion.slerpQuaternions(q0, toQuat, k);
+    envelope.scale.setScalar(s0 + (toScale - s0) * k);
+    env.inner.position.y = i0 * (1 - k);
+  }, easeInOut);
+}
+async function storeEnvelope() {
+  envState = 'storing';
+  setStatus('Guardando o envelope…', 'win');
+  await moveEnvelope(STORE_POS, STORE_QUAT, STORE_SCALE, 1100, 0.8);
+  envState = 'stored';
+  setStatus('Envelope guardado. Toque nele para abrir de novo.', 'win');
+}
+async function unstoreEnvelope() {
+  if (envState !== 'stored') return false;
+  envState = 'unstoring';
+  const dummy = new THREE.Object3D(); dummy.position.copy(HOVER_POS); dummy.lookAt(camera.position);
+  await moveEnvelope(HOVER_POS, dummy.quaternion, envScale(), 900, 0.6);
+  envState = 'ready';
+  return openEnvelope();
 }
 const closeBtn = document.getElementById('close');
 closeBtn.addEventListener('click', e => { e.stopPropagation(); closeEnvelope(); });
@@ -315,7 +344,7 @@ function newGame(p) {
   for (const id in pieces) place(id, pos[id]);
   // rei branco virado para o lado das pretas
   pieces.wk.userData.yaw.rotation.y = 0;
-  envelope.visible = false; envState = 'hidden'; closeBtn.hidden = true;
+  envelope.visible = false; envState = 'hidden'; closeBtn.hidden = true; envelope.quaternion.identity(); env.inner.position.y = 0;
   checkGlow.visible = false; busy = false;
   idleStatus();
 }
@@ -409,7 +438,7 @@ function handleTap(x, y) {
   ray.setFromCamera(ndc, camera);
   if (envelope.visible) {
     const hit = ray.intersectObject(envelope, true)[0];
-    if (hit) { if (envState === 'open') closeEnvelope(); else openEnvelope(); return; }
+    if (hit) { if (envState === 'open') closeEnvelope(); else if (envState === 'stored') unstoreEnvelope(); else openEnvelope(); return; }
   }
   const hit = ray.intersectObjects([pieces.q, pieces.bk], true)[0];
   if (hit && !busy && envState === 'hidden') return select(hit.object.userData.pieceId);
@@ -445,11 +474,15 @@ renderer.setAnimationLoop(now => {
   runTweens(performance.now());
   goldMat.opacity = 0.6 + 0.3 * Math.sin(t * 5);
   if (envelope.visible) {
-    env.inner.position.y = envState === 'arriving' ? 0 : Math.sin(t * 2) * 0.08;
-    const glow = envState === 'ready' ? 0.18 + 0.14 * Math.sin(t * 4) : 0.04;
+    const parked = envState === 'stored' || envState === 'storing' || envState === 'unstoring';
+    if (!parked && envState !== 'arriving') env.inner.position.y = Math.sin(t * 2) * 0.08;
+    if (envState === 'arriving') env.inner.position.y = 0;
+    const glow = envState === 'ready' || envState === 'stored' ? 0.18 + 0.14 * Math.sin(t * 4) : 0.04;
     env.mats.forEach(m => m.emissiveIntensity = glow);
-    env.halo.material.opacity = envState === 'open' ? 0.35 : 0.55 + 0.3 * Math.sin(t * 4);
-    envelope.lookAt(camera.position);
+    env.halo.material.opacity = envState === 'open' ? 0.35 : envState === 'stored' ? 0.35 + 0.25 * Math.sin(t * 4) : 0.55 + 0.3 * Math.sin(t * 4);
+    env.halo.scale.set(parked ? 2.6 : 3.4, parked ? 2.0 : 2.8, 1);
+    env.light.intensity = parked ? 0.4 : 1.2;
+    if (!parked) envelope.lookAt(camera.position);
   }
   if (checkGlow.visible) checkGlow.material.opacity = 0.75 + 0.25 * Math.sin(t * 6);
   controls.update();
@@ -474,5 +507,20 @@ window.__test = {
   playToMate: async () => { while (!L.isMate(pos)) { const m = allowed[Math.floor(Math.random() * allowed.length)]; await doMove(m); } },
   openEnvelope: () => openEnvelope(),
   closeEnvelope: () => closeEnvelope(),
+  layout: () => {
+    const rect = obj => { const b = new THREE.Box3().setFromObject(obj), r = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+      for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+        const v = new THREE.Vector3(x, y, z).project(camera), sx = (v.x + 1) / 2 * innerWidth, sy = (1 - v.y) / 2 * innerHeight;
+        r.x0 = Math.min(r.x0, sx); r.x1 = Math.max(r.x1, sx); r.y0 = Math.min(r.y0, sy); r.y1 = Math.max(r.y1, sy); }
+      return r; };
+    const cells = [];
+    for (let s = 0; s < L.N; s++) { const c = cellPos(s), r = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 };
+      for (const dx of [-0.5, 0.5]) for (const dz of [-0.5, 0.5]) { const v = new THREE.Vector3(c.x + dx, 0, c.z + dz).project(camera), sx = (v.x + 1) / 2 * innerWidth, sy = (1 - v.y) / 2 * innerHeight;
+        r.x0 = Math.min(r.x0, sx); r.x1 = Math.max(r.x1, sx); r.y0 = Math.min(r.y0, sy); r.y1 = Math.max(r.y1, sy); }
+      cells.push(r); }
+    const envRect = rect(env.body);
+    const pcs = { wk: rect(pieces.wk), q: rect(pieces.q), bk: rect(pieces.bk) };
+    return { envelope: envRect, cells, pieces: pcs, vw: innerWidth, vh: innerHeight };
+  },
   ready: true,
 };
