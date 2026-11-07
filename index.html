@@ -13,6 +13,9 @@ canvas{display:block}
 #status.win{background:#1d1d1d;color:#f6e7c1}
 #restart{position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);border:1px solid #ddd;background:#fff;color:#333;border-radius:999px;padding:8px 18px;font-size:14px;cursor:pointer;box-shadow:0 1px 8px rgba(0,0,0,.06)}
 #restart:hover{background:#f6f6f6}
+#close{position:fixed;transform:translateX(-50%);border:0;background:#1d1d1d;color:#f6e7c1;border-radius:999px;padding:10px 20px;font-size:15px;font-weight:600;cursor:pointer;box-shadow:0 3px 14px rgba(0,0,0,.25);z-index:5}
+#close[hidden]{display:none}
+#close:hover{background:#000}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#999;font-size:14px}
 </style>
 <script type="importmap">
@@ -26,6 +29,7 @@ canvas{display:block}
 <div id="loading">Carregando…</div>
 <div id="app"></div>
 <div id="status" role="status" aria-live="polite"></div>
+<button id="close" type="button" hidden aria-label="Fechar envelope">✕ Fechar</button>
 <button id="restart" type="button">Recomeçar</button>
 <noscript><img src="calendario.jpg" alt="Calendário de novembro de 2026" style="max-width:92vw"></noscript>
 <script type="module" src="main.js"></script>

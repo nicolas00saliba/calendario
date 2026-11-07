@@ -265,7 +265,32 @@ async function openEnvelope() {
   await tween(800, k => { env.card.position.z = 1.0 * k; env.card.position.y = 1.05 - 0.75 * k; env.card.scale.setScalar(1 + 0.75 * k); }, easeOutBack);
   envState = 'open';
   setStatus('Dica: 2b', 'win');
+  closeBtn.hidden = false;
   return true;
+}
+async function closeEnvelope() {
+  if (envState !== 'open') return false;
+  envState = 'closing';
+  closeBtn.hidden = true;
+  setStatus('Fechando…', 'win');
+  const z0 = env.card.position.z, y0 = env.card.position.y, s0 = env.card.scale.x;
+  await tween(600, k => { env.card.position.z = z0 * (1 - k); env.card.position.y = y0 + (1.05 - y0) * k; env.card.scale.setScalar(s0 + (1 - s0) * k); }, easeInOut);
+  await tween(600, k => { env.card.position.y = 1.05 * (1 - k); }, easeInOut);
+  await tween(600, k => { env.flap.rotation.x = -Math.PI * (1 - k); }, easeInOut);
+  env.card.position.set(0, 0, 0); env.card.scale.setScalar(1); env.flap.rotation.x = 0;
+  envState = 'ready';
+  setStatus('Envelope fechado. Toque nele para abrir de novo.', 'win');
+  return true;
+}
+const closeBtn = document.getElementById('close');
+closeBtn.addEventListener('click', e => { e.stopPropagation(); closeEnvelope(); });
+function placeCloseBtn() {
+  if (closeBtn.hidden) return;
+  // logo abaixo do cartão aberto
+  const v = new THREE.Vector3(0, -0.62, 0); env.card.localToWorld(v); v.project(camera);
+  const x = (v.x + 1) / 2 * innerWidth, y = (1 - v.y) / 2 * innerHeight;
+  closeBtn.style.left = `${Math.round(x)}px`;
+  closeBtn.style.top = `${Math.round(Math.min(innerHeight - 110, y + 14))}px`;
 }
 
 // ---------- Estado do jogo ----------
@@ -290,7 +315,7 @@ function newGame(p) {
   for (const id in pieces) place(id, pos[id]);
   // rei branco virado para o lado das pretas
   pieces.wk.userData.yaw.rotation.y = 0;
-  envelope.visible = false; envState = 'hidden';
+  envelope.visible = false; envState = 'hidden'; closeBtn.hidden = true;
   checkGlow.visible = false; busy = false;
   idleStatus();
 }
@@ -384,7 +409,7 @@ function handleTap(x, y) {
   ray.setFromCamera(ndc, camera);
   if (envelope.visible) {
     const hit = ray.intersectObject(envelope, true)[0];
-    if (hit) { openEnvelope(); return; }
+    if (hit) { if (envState === 'open') closeEnvelope(); else openEnvelope(); return; }
   }
   const hit = ray.intersectObjects([pieces.q, pieces.bk], true)[0];
   if (hit && !busy && envState === 'hidden') return select(hit.object.userData.pieceId);
@@ -429,6 +454,7 @@ renderer.setAnimationLoop(now => {
   if (checkGlow.visible) checkGlow.material.opacity = 0.75 + 0.25 * Math.sin(t * 6);
   controls.update();
   renderer.render(scene, camera);
+  placeCloseBtn();
 });
 
 newGame();
@@ -447,5 +473,6 @@ window.__test = {
   playOne: async () => { const m = allowed[0]; if (!m) return false; await doMove(m); return true; },
   playToMate: async () => { while (!L.isMate(pos)) { const m = allowed[Math.floor(Math.random() * allowed.length)]; await doMove(m); } },
   openEnvelope: () => openEnvelope(),
+  closeEnvelope: () => closeEnvelope(),
   ready: true,
 };
